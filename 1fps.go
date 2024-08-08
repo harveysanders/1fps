@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
@@ -102,6 +103,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	screenIdx, err := selectScreen()
+	if err != nil {
+		printDebug(fmt.Sprintf("Failed to select a screen: %v", err))
+		os.Exit(1)
+	}
+
 	encryptionKey = generateRandomKey(KEY_LENGTH)
 	fmt.Println()
 	fmt.Println("********************************************************************************")
@@ -125,7 +132,7 @@ func main() {
 	go sendCursorPosition()
 
 	for {
-		img := captureScreen()
+		img := captureScreen(screenIdx)
 
 		if !imagesEqual(img, lastScreenshot) {
 			printDebug("Images are not equal. Uploading new screenshot.")
@@ -222,17 +229,10 @@ func sendCursorPosition() {
 }
 
 // captureScreen captures the entire screen and returns the image.
-func captureScreen() image.Image {
+func captureScreen(idx int) image.Image {
 	for {
-		n := screenshot.NumActiveDisplays()
-		if n <= 0 {
-			printDebug("No active displays found")
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
 		// Capture the first display as an example
-		bounds := screenshot.GetDisplayBounds(0)
+		bounds := screenshot.GetDisplayBounds(idx)
 		img, err := screenshot.CaptureRect(bounds)
 		if err != nil {
 			printDebug("Failed to capture screen: cannot capture display: locked or switched off, retrying...")
@@ -242,6 +242,22 @@ func captureScreen() image.Image {
 
 		return img
 	}
+}
+
+func selectScreen() (int, error) {
+	var screenIdx int
+	n := screenshot.NumActiveDisplays()
+	if n == 0 {
+		return screenIdx, errors.New("no screens available")
+	}
+
+	if n == 1 {
+		return 0, nil
+	}
+
+	fmt.Printf("Select a screen index between 0 - %d\n", n-1)
+	fmt.Scan(&screenIdx)
+	return screenIdx, nil
 }
 
 // imagesEqual compares two images pixel by pixel and returns true if they are equal.
